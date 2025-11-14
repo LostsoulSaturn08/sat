@@ -7,7 +7,9 @@ const path = require('path');
 
 const taskRoutes = require('./routes/taskRoutes');
 const profileRoutes = require('./routes/profileRoutes');
-const userRoutes = require('./routes/userRoutes'); // Make sure this is imported
+const userRoutes = require('./routes/userRoutes');
+const streakRoutes = require('./routes/streakRoutes'); // ✅ ADD THIS LINE
+const journalRoutes = require('./routes/journalRoutes'); // ✅ ADD THIS LINE
 
 const app = express();
 
@@ -27,7 +29,9 @@ app.get('/', (req, res) => {
 
 app.use('/api/tasks', taskRoutes);
 app.use('/api', profileRoutes);
-app.use('/api', userRoutes); // ✅ This line mounts userRoutes, including /google-login
+app.use('/api', userRoutes);
+app.use('/api/streaks', streakRoutes); // ✅ ADD THIS LINE
+app.use('/api/journal', journalRoutes); // ✅ ADD THIS LINE
 
 const PORT = 5000;
 app.listen(PORT, () => {

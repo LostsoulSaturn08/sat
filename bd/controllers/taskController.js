@@ -1,6 +1,8 @@
-// backend/controllers/taskController.js
+// bd/controllers/taskController.js
 const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
+// ✅ Import the streak update function
+const { updateStreakOnTaskCompletion } = require('./streakController');
 
 const createTask = async (req, res) => {
   try {
@@ -38,11 +40,21 @@ const getTasks = async (req, res) => {
 const updateTask = async (req, res) => {
   try {
     const taskId = parseInt(req.params.id, 10);
+    
+    // ✅ Handle streak logic *before* updating the task
+    let streakStatus = {};
+    if (req.body.completed === true) {
+      streakStatus = await updateStreakOnTaskCompletion(req.user.id, taskId);
+    }
+    
     const updated = await prisma.task.update({
       where: { id: taskId },
-      data: req.body,    // e.g. { progress: 50 } or { archived: true }
+      data: req.body,
     });
-    return res.json(updated);
+    
+    // ✅ Send back both the updated task and the streak status
+    return res.json({ ...updated, ...streakStatus });
+
   } catch (err) {
     console.error('🔥 updateTask error:', err);
     return res.status(500).json({ message: 'Server error updating task' });
@@ -52,7 +64,14 @@ const updateTask = async (req, res) => {
 const deleteTask = async (req, res) => {
   try {
     const taskId = parseInt(req.params.id, 10);
-    await prisma.task.delete({ where: { id: taskId } });
+    
+    // ✅ Also delete associated streak and journal entries
+    await prisma.$transaction([
+      prisma.journalEntry.deleteMany({ where: { taskId: taskId } }),
+      prisma.streak.deleteMany({ where: { taskId: taskId } }),
+      prisma.task.delete({ where: { id: taskId } })
+    ]);
+    
     return res.status(204).send();
   } catch (err) {
     console.error('🔥 deleteTask error:', err);
