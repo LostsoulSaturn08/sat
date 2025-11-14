@@ -1,12 +1,13 @@
-// src/ProgressTracker.jsx (FIXED)
+// src/ProgressTracker.jsx
 import React, { useState, useEffect } from "react";
 import Profile from "./Profile";
 import Login from "./Login";
 import TaskCard from "./TaskCard";
 import axios from "axios";
 import TaskCreationForm from "./TaskCreationForm";
-import StreakGrid from "./StreakGrid"; 
+import StreakGrid from "./StreakGrid"; // ✅ This will be our new GitHub grid
 import './JournalModal.css'; 
+import './StreakGrid.css'; // ✅ Add the new CSS for the grid
 
 const getInitialUserState = () => {
   const storedUser = localStorage.getItem('user');
@@ -36,7 +37,7 @@ const ProgressTracker = () => {
   const [loggedIn, setLoggedIn] = useState(initialUserState.loggedIn);
   const [showArchived, setShowArchived] = useState(false);
 
-  // ✅ NEW: A dedicated function just for logging out
+  // ✅ DEDICATED LOGOUT FUNCTION
   const handleLogout = () => {
     setLoggedIn(false);
     setProfile(null);
@@ -44,21 +45,18 @@ const ProgressTracker = () => {
     localStorage.removeItem('token');
   };
 
-  // ✅ RENAMED: This function is for "soft refreshing" the profile state
+  // ✅ DEDICATED PROFILE REFRESH FUNCTION
   const handleProfileRefresh = () => {
     const token = localStorage.getItem('token');
     try {
       const user = JSON.parse(localStorage.getItem('user'));
       if (user && token) {
-         // Re-set profile from local storage (e.g., to update token count)
          setProfile({ ...user, token });
          return; 
       }
-    } catch (e) {
-      // Corrupted user data
-    }
+    } catch (e) { /* Corrupted user data */ }
     
-    // If refresh fails (no user/token), force a hard logout
+    // If refresh fails, force a hard logout
     handleLogout();
   };
 
@@ -106,8 +104,7 @@ const ProgressTracker = () => {
         setTasks(res.data);
       } catch (err) {
         if (err.response && err.response.status === 401) {
-          // If token is expired, trigger a hard logout
-          handleLogout(); 
+          handleLogout(); // ✅ Hard logout if token is expired
         }
       }
     };
@@ -134,8 +131,8 @@ const ProgressTracker = () => {
         {loggedIn && (
           <Profile
             user={profile}
-            onLogout={handleLogout} // ✅ Pass the correct logout function
-            onAuthError={handleProfileRefresh} // ✅ Pass the refresh function
+            onLogout={handleLogout} // ✅ Pass correct logout function
+            onAuthError={handleProfileRefresh} // ✅ Pass profile refresh
             showArchived={showArchived}
             setShowArchived={setShowArchived}
           />
@@ -146,16 +143,16 @@ const ProgressTracker = () => {
         <Login onLogin={handleLogin} />
       ) : (
         <>
+          {/* ✅ Render the new GitHub Activity Grid */}
           <StreakGrid 
-            tasks={tasks}
             token={profile.token}
-            onAuthError={handleProfileRefresh} // ✅ Use refresh function
+            onAuthError={handleProfileRefresh}
           />
 
           <TaskCreationForm
             token={profile.token}
             onAddTask={addTaskHandler}
-            onAuthError={handleProfileRefresh} // ✅ Use refresh function
+            onAuthError={handleProfileRefresh}
           />
           
           <div className="grid grid-cols-1 sm:g:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
@@ -167,7 +164,7 @@ const ProgressTracker = () => {
                 onRemove={handleRemove}
                 onArchive={handleArchive}
                 onUnarchive={handleUnarchive}
-                onAuthError={handleProfileRefresh} // ✅ Use refresh function
+                onAuthError={handleProfileRefresh}
                 userProfile={profile} 
               />
             ))}

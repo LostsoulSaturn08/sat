@@ -1,14 +1,18 @@
-// bd/routes/journalRoutes.js (NEW FILE)
+// bd/routes/journalRoutes.js
 const express = require('express'); 
 const router  = express.Router();
 
 const authenticateUser = require('../controllers/authMiddleware');
-const { createJournalEntry } = require('../controllers/journalController');
+// ✅ Import both functions
+const { createJournalEntry, getJournalEntries } = require('../controllers/journalController');
 
 // All journal routes require a user
 router.use(authenticateUser);
 
-// POST /api/journal
+// ✅ GET /api/journal (Gets all entries for the grid)
+router.get('/', getJournalEntries);
+
+// POST /api/journal (Creates a new entry)
 router.post('/', createJournalEntry);
 
 module.exports = router;

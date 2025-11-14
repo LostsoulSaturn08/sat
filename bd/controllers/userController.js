@@ -11,7 +11,7 @@ const generateToken = (user) => {
   return jwt.sign(
     { id: user.id, username: user.username },
     process.env.JWT_SECRET || 'fallback_secret',
-    { expiresIn: '7d' } // ✅ Changed from 1h to 7 days
+    { expiresIn: '7d' } // ✅ FIX: Changed from 1h to 7 days
   );
 };
 

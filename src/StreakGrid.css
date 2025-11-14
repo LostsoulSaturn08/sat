@@ -1,0 +1,29 @@
+/* src/StreakGrid.css */
+/* Styles for react-calendar-heatmap */
+
+.react-calendar-heatmap .color-empty {
+  fill: #374151; /* gray-700 */
+}
+
+.react-calendar-heatmap .color-scale-1 {
+  fill: #a855f7; /* purple-500 */
+}
+.react-calendar-heatmap .color-scale-2 {
+  fill: #d600ff; /* primary-500 */
+}
+.react-calendar-heatmap .color-scale-4 {
+  fill: #f59e0b; /* amber-500 */
+}
+
+/* Tooltip styles */
+.react-tooltip-lite {
+  background: #111827 !important; /* gray-900 */
+  color: white !important;
+  border: 1px solid #d600ff80 !important;
+  border-radius: 4px !important;
+  padding: 8px 12px !important;
+}
+
+.react-calendar-heatmap text {
+  display: none; /* Hide month/day labels for a cleaner look */
+}
