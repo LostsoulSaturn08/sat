@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import CalendarHeatmap from 'react-calendar-heatmap';
-import ReactTooltip from 'react-tooltip';
+import { Tooltip } from 'react-tooltip'; // ✅ Import the correct Tooltip
 
 const StreakGrid = ({ token, onAuthError }) => {
   const [heatmapData, setHeatmapData] = useState([]);
@@ -38,7 +38,7 @@ const StreakGrid = ({ token, onAuthError }) => {
     };
 
     fetchJournalEntries();
-  }, [token]); // Only refetch if token changes
+  }, [token]);
 
   // Get start date for the last 6 months
   const sixMonthsAgo = new Date();
@@ -55,19 +55,22 @@ const StreakGrid = ({ token, onAuthError }) => {
           if (!value) {
             return 'color-empty';
           }
-          // Color scale: 1, 2-3, 4+
           if (value.count >= 4) return 'color-scale-4';
           if (value.count >= 2) return 'color-scale-2';
           return 'color-scale-1';
         }}
+        // ✅ NEW: Set up tooltip attributes for version 5
         tooltipDataAttrs={(value) => {
           if (!value || !value.date) return null;
+          const count = value.count || 0;
           return {
-            'data-tip': `${value.date}: ${value.count} journal entr${value.count === 1 ? 'y' : 'ies'}`,
+            'data-tooltip-id': 'heatmap-tooltip', // ID for the tooltip
+            'data-tooltip-content': `${value.date}: ${count} journal entr${count === 1 ? 'y' : 'ies'}`,
           };
         }}
       />
-      <ReactTooltip />
+      {/* ✅ NEW: Render the Tooltip component itself */}
+      <Tooltip id="heatmap-tooltip" />
     </div>
   );
 };

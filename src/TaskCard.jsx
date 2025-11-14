@@ -1,45 +1,46 @@
-// src/TaskCard.jsx (FIXED)
-import React, { useState, useEffect } from "react";
+// src/TaskCard.jsx
+import React, { useState, useEffect } from "react"; 
 import axios from "axios";
 import { FaCheck, FaArchive, FaUndo, FaTrashAlt, FaPlus, FaMinus } from "react-icons/fa";
-// ✅ Import the new, separate JournalModal component
 import JournalModal from "./JournalModal"; 
 
 const TaskCard = ({ task, token, onArchive, onRemove, onUnarchive, onAuthError, userProfile }) => {
   if (!task) return null;
 
   const { id, text, deadline, progress, total } = task;
-  const initialPct = total > 0 ? (progress / total) * 100 : 0;
   
-  // ✅ Fix: Use state for completion status
-  const [isComplete, setIsComplete] = useState(initialPct >= 100);
+  const initialPct = total > 0 ? (progress / total) * 100 : 0;
   const [pct, setPct] = useState(initialPct);
+  const [isComplete, setIsComplete] = useState(initialPct >= 100);
+  
   const [deleted, setDeleted] = useState(false);
   const [archived, setArchived] = useState(task.archived || false);
   const [showJournal, setShowJournal] = useState(false);
 
   const due = deadline ? new Date(deadline) : null;
-  const isOverdue = due && new Date() > due && !isComplete;
-
-  // ✅ Sync with task prop changes
+  
   useEffect(() => {
     const newPct = task.total > 0 ? (task.progress / task.total) * 100 : 0;
     setPct(newPct);
     setIsComplete(newPct >= 100);
     setArchived(task.archived || false);
-  }, [task]);
+  }, [task]); 
 
+  const isOverdue = due && new Date() > due && !isComplete;
+
+  // ✅ --- FUNCTION TO REPLACE --- ✅
   const saveToBackend = async (data) => {
     try {
+      // THE FIX: The request body should *only* be the data to update.
+      // The `taskId` is already in the URL (`/api/tasks/${id}`).
       const response = await axios.patch(
         `http://localhost:5000/api/tasks/${id}`,
-        { ...data, taskId: id }, 
+        data, // No longer sending `{ ...data, taskId: id }`
         { headers: { Authorization: `Bearer ${token}` } }
       );
       
-      // Check for the streak_broken flag
       if (response.data.streak_broken) {
-        setShowJournal(true); // Open the journal modal
+        setShowJournal(true);
       }
     } catch (err) {
       if (err.response && err.response.status === 401) {
@@ -47,6 +48,7 @@ const TaskCard = ({ task, token, onArchive, onRemove, onUnarchive, onAuthError, 
       }
     }
   };
+  // ✅ -------------------------- ✅
 
   const deleteOnBackend = async () => {
     try {
@@ -65,8 +67,8 @@ const TaskCard = ({ task, token, onArchive, onRemove, onUnarchive, onAuthError, 
     const newProgress = Math.round((newPct / 100) * total);
     const newIsComplete = newProgress >= total;
     
-    setPct(newPct);
-    setIsComplete(newIsComplete); // Update state immediately
+    setPct(newPct); 
+    setIsComplete(newIsComplete); 
     
     await saveToBackend({ progress: newProgress, completed: newIsComplete });
   };
@@ -81,15 +83,15 @@ const TaskCard = ({ task, token, onArchive, onRemove, onUnarchive, onAuthError, 
   };
 
   const archiveTask = async () => {
+    setArchived(true); 
     await saveToBackend({ archived: true });
-    setArchived(true);
-    onArchive?.({ ...task, archived: true }); // Pass updated task
+    onArchive?.({ ...task, archived: true });
   };
 
   const unarchiveTask = async () => {
+    setArchived(false); 
     await saveToBackend({ archived: false });
-    setArchived(false);
-    onUnarchive?.({ ...task, archived: false }); // Pass updated task
+    onUnarchive?.({ ...task, archived: false });
   };
 
   if (deleted) return null;
@@ -108,7 +110,6 @@ const TaskCard = ({ task, token, onArchive, onRemove, onUnarchive, onAuthError, 
           onClose={() => setShowJournal(false)}
           onAuthError={onAuthError}
           onForgiveSuccess={(updatedUser) => {
-            // This is the "soft refresh" to update token count
             onAuthError(); 
             setShowJournal(false);
           }}

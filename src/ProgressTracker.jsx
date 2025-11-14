@@ -9,16 +9,21 @@ import StreakGrid from "./StreakGrid"; // ✅ This will be our new GitHub grid
 import './JournalModal.css'; 
 import './StreakGrid.css'; // ✅ Add the new CSS for the grid
 
+// src/ProgressTracker.jsx
+
+// ✅ REPLACE THE OLD FUNCTION WITH THIS ONE
 const getInitialUserState = () => {
   const storedUser = localStorage.getItem('user');
   const storedToken = localStorage.getItem('token');
   if (storedUser && storedToken) {
     try {
       const user = JSON.parse(storedUser);
+      // THE FIX: We must ensure the 'name' field is correctly
+      // pulled from localStorage and passed to the profile state.
       const profile = { 
         ...user, 
         token: storedToken,
-        name: user.name || user.username, 
+        name: user.name || user.username, // Use 'name' if it exists, otherwise fall back to 'username'
         forgivenessTokens: user.forgivenessTokens !== undefined ? user.forgivenessTokens : 2 
       };
       return { loggedIn: true, profile: profile };
@@ -29,6 +34,7 @@ const getInitialUserState = () => {
   }
   return { loggedIn: false, profile: null };
 };
+// (The rest of your ProgressTracker.jsx file stays the same)
 
 const ProgressTracker = () => {
   const [tasks, setTasks] = useState([]);

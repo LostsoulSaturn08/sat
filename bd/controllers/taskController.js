@@ -1,7 +1,6 @@
 // bd/controllers/taskController.js
 const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
-// ✅ Import the streak update function
 const { updateStreakOnTaskCompletion } = require('./streakController');
 
 const createTask = async (req, res) => {
@@ -37,35 +36,40 @@ const getTasks = async (req, res) => {
   }
 };
 
+// ✅ --- FUNCTION TO REPLACE --- ✅
 const updateTask = async (req, res) => {
   try {
     const taskId = parseInt(req.params.id, 10);
     
-    // ✅ Handle streak logic *before* updating the task
+    // THE FIX: Destructure the invalid `taskId` out of the request body.
+    // `dataToUpdate` will contain only valid fields like { progress, completed }
+    const { taskId: _invalidField, ...dataToUpdate } = req.body; 
+
     let streakStatus = {};
-    if (req.body.completed === true) {
+    // Use the data from `dataToUpdate` for the check
+    if (dataToUpdate.completed === true) { 
       streakStatus = await updateStreakOnTaskCompletion(req.user.id, taskId);
     }
     
     const updated = await prisma.task.update({
       where: { id: taskId },
-      data: req.body,
+      data: dataToUpdate, // Pass only the valid data to Prisma
     });
     
-    // ✅ Send back both the updated task and the streak status
+    // Send back the updated task and streak status
     return res.json({ ...updated, ...streakStatus });
 
   } catch (err) {
     console.error('🔥 updateTask error:', err);
-    return res.status(500).json({ message: 'Server error updating task' });
+    res.status(500).json({ message: 'Server error updating task' });
   }
 };
+// ✅ -------------------------- ✅
 
 const deleteTask = async (req, res) => {
   try {
     const taskId = parseInt(req.params.id, 10);
     
-    // ✅ Also delete associated streak and journal entries
     await prisma.$transaction([
       prisma.journalEntry.deleteMany({ where: { taskId: taskId } }),
       prisma.streak.deleteMany({ where: { taskId: taskId } }),
