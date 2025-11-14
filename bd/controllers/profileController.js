@@ -1,3 +1,4 @@
+// lostsoulsaturn08/sat/sat-019c4325342575340607add8b5a7fff4fb04e73f/bd/controllers/profileController.js
 // bd/controllers/profileController.js
 const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
@@ -36,7 +37,7 @@ const uploadProfileImage = async (req, res) => {
         id: user.id,
         username: user.username,
         dp: user.dp,
-        name: user.name, // ✅ ADD THIS LINE
+        name: user.name,
       },
     });
   } catch (error) {
@@ -45,4 +46,40 @@ const uploadProfileImage = async (req, res) => {
   }
 };
 
-module.exports = { uploadProfileImage };
+// ✅ --- NEW FUNCTION --- ✅
+const updateProfileName = async (req, res) => {
+  const userId = req.user.id;
+  const { name } = req.body;
+
+  if (!name || typeof name !== 'string' || name.trim().length === 0) {
+    return res.status(400).json({ error: 'A valid name is required.' });
+  }
+
+  try {
+    const updatedUser = await prisma.user.update({
+      where: { id: userId },
+      data: { name: name.trim() },
+      select: {
+        id: true,
+        username: true,
+        dp: true,
+        forgivenessTokens: true,
+        name: true,
+      },
+    });
+
+    res.status(200).json({
+      message: 'Name updated successfully',
+      user: updatedUser,
+    });
+  } catch (error) {
+    console.error('🔥 Error updating user name:', error);
+    res.status(500).json({ error: 'Server error: Unable to update name' });
+  }
+};
+// ✅ -------------------- ✅
+
+module.exports = {
+  uploadProfileImage,
+  updateProfileName, // ✅ Export the new function
+};

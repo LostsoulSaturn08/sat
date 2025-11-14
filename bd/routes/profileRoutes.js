@@ -1,7 +1,9 @@
+// lostsoulsaturn08/sat/sat-019c4325342575340607add8b5a7fff4fb04e73f/bd/routes/profileRoutes.js
 const express = require('express');
 const router = express.Router();
 const multer = require('multer');
-const { uploadProfileImage } = require('../controllers/profileController');
+// ✅ Import the new function
+const { uploadProfileImage, updateProfileName } = require('../controllers/profileController');
 const authenticateUser = require('../controllers/authMiddleware'); // Import centralized middleware
 
 // Set up multer storage
@@ -10,15 +12,23 @@ const storage = multer.diskStorage({
   filename: (req, file, cb) => cb(null, Date.now() + '-' + file.originalname),
 });
 
-const upload = multer({ storage }); 
+const upload = multer({ storage });
 
 // Route to handle profile image upload
-// FIX: Use the centralized middleware for authentication
 router.post(
   '/upload-profile-image',
-  authenticateUser, // Standard authentication check
+  authenticateUser,
   upload.single('profileImage'),
   uploadProfileImage
 );
+
+// ✅ --- NEW ROUTE --- ✅
+// Route to handle name change
+router.patch(
+  '/profile/name',
+  authenticateUser, // Requires user to be logged in
+  updateProfileName
+);
+// ✅ ----------------- ✅
 
 module.exports = router;

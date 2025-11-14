@@ -1,15 +1,23 @@
+// lostsoulsaturn08/sat/sat-019c4325342575340607add8b5a7fff4fb04e73f/src/Profile.jsx
 // src/Profile.jsx
 import React, { useState, useEffect } from "react";
 import axios from "axios";
+import { FaEdit, FaSave, FaTimes } from "react-icons/fa"; // ✅ Import icons
 
 const Profile = ({ user, onLogout, onAuthError, showArchived, setShowArchived }) => {
   const [dp, setDp] = useState(user?.dp || "");
   const [isOpen, setIsOpen] = useState(false);
   const [archive, setArchive] = useState([]);
 
+  // ✅ --- NEW STATE FOR NAME EDIT --- ✅
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [name, setName] = useState(user?.name || user?.username);
+  // ✅ --------------------------------- ✅
+
   useEffect(() => {
     setDp(user?.dp || "");
-  }, [user?.dp]);
+    setName(user?.name || user?.username); // ✅ Update name state if user prop changes
+  }, [user]);
 
   const getImageUrl = (path) => {
     return path ? `http://localhost:5000${path}` : "/default-avatar.png";
@@ -27,6 +35,7 @@ const Profile = ({ user, onLogout, onAuthError, showArchived, setShowArchived })
   }, [showArchived]);
 
   const handleDpUpload = async (e) => {
+    // ... (rest of the function is unchanged)
     const file = e.target.files[0];
     if (!file) return;
 
@@ -68,6 +77,34 @@ const Profile = ({ user, onLogout, onAuthError, showArchived, setShowArchived })
     }
   };
 
+  // ✅ --- NEW FUNCTION TO SAVE NAME --- ✅
+  const handleSaveName = async () => {
+    if (!name.trim() || name.trim() === user.name) {
+      setIsEditingName(false);
+      setName(user.name || user.username); // Reset if invalid or unchanged
+      return;
+    }
+    
+    try {
+      const response = await axios.patch(
+        "http://localhost:5000/api/profile/name",
+        { name: name.trim() },
+        { headers: { Authorization: `Bearer ${user.token}` } }
+      );
+      
+      const updatedUser = response.data.user;
+      localStorage.setItem('user', JSON.stringify(updatedUser)); // Update local storage
+      onAuthError(); // Trigger parent profile refresh
+      setIsEditingName(false); // Exit edit mode
+      
+    } catch (err) {
+      console.error("Name update error:", err);
+      if (err.response && err.response.status === 401) onAuthError();
+      alert(err.response?.data?.error || "Failed to update name.");
+    }
+  };
+  // ✅ ---------------------------------- ✅
+
   return (
     <div className="relative">
       <button
@@ -79,7 +116,6 @@ const Profile = ({ user, onLogout, onAuthError, showArchived, setShowArchived })
           alt="Profile"
           className="w-12 h-12 object-cover rounded-full border-2 border-blue-500"
         />
-        {/* ✅ FIX: Use user.name, fallback to username */}
         <span className="text-white font-bold">{user?.name || user?.username}</span>
       </button>
 
@@ -98,9 +134,39 @@ const Profile = ({ user, onLogout, onAuthError, showArchived, setShowArchived })
               </div>
             </label>
 
-            {/* ✅ FIX: Use user.name, fallback to username */}
-            <p className="text-xl font-bold text-center mt-3">{user?.name || user?.username}</p>
-            {/* ✅ Show email (username) smaller */}
+            {/* ✅ --- EDITABLE NAME FIELD --- ✅ */}
+            {!isEditingName ? (
+              <div className="flex items-center justify-center gap-2 mt-3">
+                <p className="text-xl font-bold text-center">{name}</p>
+                <button 
+                  onClick={() => setIsEditingName(true)} 
+                  className="p-1 text-gray-400 hover:text-white"
+                >
+                  <FaEdit />
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 mt-3">
+                <input
+                  type="text"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  className="flex-grow p-2 text-white rounded-lg border border-gray-600 bg-gray-700 focus:ring-primary-500 focus:border-primary-500"
+                />
+                <button onClick={handleSaveName} className="p-2 text-green-500 hover:text-green-400"><FaSave /></button>
+                <button 
+                  onClick={() => {
+                    setIsEditingName(false);
+                    setName(user.name || user.username); // Reset on cancel
+                  }} 
+                  className="p-2 text-red-500 hover:text-red-400"
+                >
+                  <FaTimes />
+                </button>
+              </div>
+            )}
+            {/* ✅ ----------------------------- ✅ */}
+            
             <p className="text-sm text-gray-400 text-center">{user?.username}</p>
 
             <div className="text-center mt-4 p-3 bg-gray-800 rounded-lg">

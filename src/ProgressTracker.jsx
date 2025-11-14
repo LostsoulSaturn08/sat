@@ -1,3 +1,4 @@
+// lostsoulsaturn08/sat/sat-019c4325342575340607add8b5a7fff4fb04e73f/src/ProgressTracker.jsx
 // src/ProgressTracker.jsx
 import React, { useState, useEffect } from "react";
 import Profile from "./Profile";
@@ -5,25 +6,20 @@ import Login from "./Login";
 import TaskCard from "./TaskCard";
 import axios from "axios";
 import TaskCreationForm from "./TaskCreationForm";
-import StreakGrid from "./StreakGrid"; // ✅ This will be our new GitHub grid
+import StreakGrid from "./StreakGrid";
 import './JournalModal.css'; 
-import './StreakGrid.css'; // ✅ Add the new CSS for the grid
+import './StreakGrid.css';
 
-// src/ProgressTracker.jsx
-
-// ✅ REPLACE THE OLD FUNCTION WITH THIS ONE
 const getInitialUserState = () => {
   const storedUser = localStorage.getItem('user');
   const storedToken = localStorage.getItem('token');
   if (storedUser && storedToken) {
     try {
       const user = JSON.parse(storedUser);
-      // THE FIX: We must ensure the 'name' field is correctly
-      // pulled from localStorage and passed to the profile state.
       const profile = { 
         ...user, 
         token: storedToken,
-        name: user.name || user.username, // Use 'name' if it exists, otherwise fall back to 'username'
+        name: user.name || user.username,
         forgivenessTokens: user.forgivenessTokens !== undefined ? user.forgivenessTokens : 2 
       };
       return { loggedIn: true, profile: profile };
@@ -34,7 +30,6 @@ const getInitialUserState = () => {
   }
   return { loggedIn: false, profile: null };
 };
-// (The rest of your ProgressTracker.jsx file stays the same)
 
 const ProgressTracker = () => {
   const [tasks, setTasks] = useState([]);
@@ -42,8 +37,12 @@ const ProgressTracker = () => {
   const [profile, setProfile] = useState(initialUserState.profile);
   const [loggedIn, setLoggedIn] = useState(initialUserState.loggedIn);
   const [showArchived, setShowArchived] = useState(false);
+  
+  // ✅ --- NEW STATE --- ✅
+  // This key will be "bumped" to trigger a refresh in StreakGrid
+  const [journalUpdateKey, setJournalUpdateKey] = useState(0);
+  // ✅ ----------------- ✅
 
-  // ✅ DEDICATED LOGOUT FUNCTION
   const handleLogout = () => {
     setLoggedIn(false);
     setProfile(null);
@@ -51,7 +50,6 @@ const ProgressTracker = () => {
     localStorage.removeItem('token');
   };
 
-  // ✅ DEDICATED PROFILE REFRESH FUNCTION
   const handleProfileRefresh = () => {
     const token = localStorage.getItem('token');
     try {
@@ -62,9 +60,15 @@ const ProgressTracker = () => {
       }
     } catch (e) { /* Corrupted user data */ }
     
-    // If refresh fails, force a hard logout
     handleLogout();
   };
+  
+  // ✅ --- NEW FUNCTION --- ✅
+  // This function will be called by JournalModal on success
+  const handleJournalUpdate = () => {
+    setJournalUpdateKey(prevKey => prevKey + 1);
+  };
+  // ✅ -------------------- ✅
 
   const handleLogin = (data) => {
     const { user, token } = data;
@@ -110,7 +114,7 @@ const ProgressTracker = () => {
         setTasks(res.data);
       } catch (err) {
         if (err.response && err.response.status === 401) {
-          handleLogout(); // ✅ Hard logout if token is expired
+          handleLogout();
         }
       }
     };
@@ -137,8 +141,8 @@ const ProgressTracker = () => {
         {loggedIn && (
           <Profile
             user={profile}
-            onLogout={handleLogout} // ✅ Pass correct logout function
-            onAuthError={handleProfileRefresh} // ✅ Pass profile refresh
+            onLogout={handleLogout}
+            onAuthError={handleProfileRefresh} // This reloads profile state
             showArchived={showArchived}
             setShowArchived={setShowArchived}
           />
@@ -149,10 +153,10 @@ const ProgressTracker = () => {
         <Login onLogin={handleLogin} />
       ) : (
         <>
-          {/* ✅ Render the new GitHub Activity Grid */}
           <StreakGrid 
             token={profile.token}
             onAuthError={handleProfileRefresh}
+            journalUpdateKey={journalUpdateKey} // ✅ Pass the key
           />
 
           <TaskCreationForm
@@ -171,7 +175,8 @@ const ProgressTracker = () => {
                 onArchive={handleArchive}
                 onUnarchive={handleUnarchive}
                 onAuthError={handleProfileRefresh}
-                userProfile={profile} 
+                userProfile={profile}
+                onJournalUpdate={handleJournalUpdate} // ✅ Pass update function
               />
             ))}
             {tasksToDisplay.length === 0 && (

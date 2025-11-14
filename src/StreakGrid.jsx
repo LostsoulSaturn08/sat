@@ -1,10 +1,12 @@
+// lostsoulsaturn08/sat/sat-019c4325342575340607add8b5a7fff4fb04e73f/src/StreakGrid.jsx
 // src/StreakGrid.jsx
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import CalendarHeatmap from 'react-calendar-heatmap';
-import { Tooltip } from 'react-tooltip'; // ✅ Import the correct Tooltip
+import { Tooltip } from 'react-tooltip';
 
-const StreakGrid = ({ token, onAuthError }) => {
+// ✅ Accept journalUpdateKey
+const StreakGrid = ({ token, onAuthError, journalUpdateKey }) => {
   const [heatmapData, setHeatmapData] = useState([]);
 
   useEffect(() => {
@@ -19,7 +21,7 @@ const StreakGrid = ({ token, onAuthError }) => {
         // Process data for the heatmap
         const counts = {};
         res.data.forEach(entry => {
-          const date = entry.createdAt.split('T')[0]; // Get YYYY-MM-DD
+          const date = entry.createdAt.split('T')[0];
           counts[date] = (counts[date] || 0) + 1;
         });
 
@@ -38,7 +40,7 @@ const StreakGrid = ({ token, onAuthError }) => {
     };
 
     fetchJournalEntries();
-  }, [token]);
+  }, [token, onAuthError, journalUpdateKey]); // ✅ Add journalUpdateKey to dependency array
 
   // Get start date for the last 6 months
   const sixMonthsAgo = new Date();
@@ -59,17 +61,15 @@ const StreakGrid = ({ token, onAuthError }) => {
           if (value.count >= 2) return 'color-scale-2';
           return 'color-scale-1';
         }}
-        // ✅ NEW: Set up tooltip attributes for version 5
         tooltipDataAttrs={(value) => {
           if (!value || !value.date) return null;
           const count = value.count || 0;
           return {
-            'data-tooltip-id': 'heatmap-tooltip', // ID for the tooltip
+            'data-tooltip-id': 'heatmap-tooltip',
             'data-tooltip-content': `${value.date}: ${count} journal entr${count === 1 ? 'y' : 'ies'}`,
           };
         }}
       />
-      {/* ✅ NEW: Render the Tooltip component itself */}
       <Tooltip id="heatmap-tooltip" />
     </div>
   );

@@ -1,3 +1,4 @@
+// lostsoulsaturn08/sat/sat-019c4325342575340607add8b5a7fff4fb04e73f/bd/controllers/userController.js
 // bd/controllers/userController.js
 const { PrismaClient } = require('@prisma/client');
 const bcrypt = require('bcrypt');
@@ -11,7 +12,7 @@ const generateToken = (user) => {
   return jwt.sign(
     { id: user.id, username: user.username },
     process.env.JWT_SECRET || 'fallback_secret',
-    { expiresIn: '7d' } // ✅ FIX: Changed from 1h to 7 days
+    { expiresIn: '7d' }
   );
 };
 
@@ -31,24 +32,30 @@ const loginUser = async (req, res) => {
         password: true,
         dp: true,
         forgivenessTokens: true,
-        name: true, // ✅ Get the name
+        name: true,
       },
     });
 
     if (!user) {
       const hashedPassword = await bcrypt.hash(password, 10);
+      
+      // ✅ --- FIX --- ✅
+      // Set name to username by default, or the part before the @ if it's an email
+      const displayName = username.includes('@') ? username.split('@')[0] : username;
+      // ✅ ----------- ✅
+
       const newUser = await prisma.user.create({
         data: {
           username,
           password: hashedPassword,
-          name: username, // ✅ Set name to username by default
+          name: displayName, // ✅ Use the new displayName
         },
         select: {
           id: true,
           username: true,
           dp: true,
           forgivenessTokens: true,
-          name: true, // ✅ Return the name
+          name: true,
         },
       });
 
@@ -88,7 +95,7 @@ const handleGoogleLogin = async (req, res) => {
 
     const googleUserId = payload['sub'];
     const email = payload['email'];
-    const name = payload['name']; // ✅ We will now use this 'name'
+    const name = payload['name'];
     const picture = payload['picture'];
 
     if (!email) {
@@ -103,7 +110,7 @@ const handleGoogleLogin = async (req, res) => {
         username: true,
         dp: true,
         forgivenessTokens: true,
-        name: true, // ✅ Get the name
+        name: true,
       },
     });
 
@@ -118,14 +125,14 @@ const handleGoogleLogin = async (req, res) => {
           username: email,
           password: placeholderPassword,
           dp: picture || null,
-          name: name || email, // ✅ Save the Google name, fallback to email
+          name: name || email,
         },
         select: {
           id: true,
           username: true,
           dp: true,
           forgivenessTokens: true,
-          name: true, // ✅ Return the name
+          name: true,
         },
       });
 
