@@ -1,4 +1,3 @@
-// lostsoulsaturn08/sat/sat-019c4325342575340607add8b5a7fff4fb04e73f/bd/controllers/userController.js
 // bd/controllers/userController.js
 const { PrismaClient } = require('@prisma/client');
 const bcrypt = require('bcrypt');
@@ -7,6 +6,53 @@ const { OAuth2Client } = require('google-auth-library');
 
 const prisma = new PrismaClient();
 const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+
+// --- NEW HELPER FUNCTIONS ---
+const getDateKey = (date) => date.toISOString().split('T')[0];
+
+/**
+ * Creates a journal entry for login, but only once per day.
+ * This will mark the activity heatmap (StreakGrid) for today.
+ */
+const createLoginJournalEntry = async (userId) => {
+  const todayKey = getDateKey(new Date());
+  
+  try {
+    const lastLoginEntry = await prisma.journalEntry.findFirst({
+      where: {
+        userId: userId,
+        reason: "User login" // This is a special reason for this entry
+      },
+      orderBy: {
+        createdAt: 'desc'
+      }
+    });
+
+    if (lastLoginEntry) {
+      const lastLoginDateKey = getDateKey(lastLoginEntry.createdAt);
+      if (lastLoginDateKey === todayKey) {
+        // An entry for today already exists, do nothing
+        return;
+      }
+    }
+
+    // No login entry for today, create one
+    await prisma.journalEntry.create({
+      data: {
+        userId: userId,
+        reason: "User login",
+        mitigation: "N/A", // 'mitigation' is required, so we use a placeholder
+        taskId: null
+      }
+    });
+    console.log(`Created login journal entry for user ${userId}`);
+
+  } catch (error) {
+    // Log the error but don't fail the login
+    console.error("Failed to create login journal entry:", error);
+  }
+};
+// --- END OF NEW FUNCTIONS ---
 
 const generateToken = (user) => {
   return jwt.sign(
@@ -39,16 +85,13 @@ const loginUser = async (req, res) => {
     if (!user) {
       const hashedPassword = await bcrypt.hash(password, 10);
       
-      // ✅ --- FIX --- ✅
-      // Set name to username by default, or the part before the @ if it's an email
       const displayName = username.includes('@') ? username.split('@')[0] : username;
-      // ✅ ----------- ✅
 
       const newUser = await prisma.user.create({
         data: {
           username,
           password: hashedPassword,
-          name: displayName, // ✅ Use the new displayName
+          name: displayName,
         },
         select: {
           id: true,
@@ -58,6 +101,9 @@ const loginUser = async (req, res) => {
           name: true,
         },
       });
+      
+      // ✅ CREATE LOGIN ENTRY FOR NEW USER
+      await createLoginJournalEntry(newUser.id);
 
       const token = generateToken(newUser);
       return res.status(201).json({ message: 'User registered successfully', user: newUser, token });
@@ -67,6 +113,9 @@ const loginUser = async (req, res) => {
     if (!isMatch) {
       return res.status(401).json({ message: 'Invalid password' });
     }
+    
+    // ✅ CREATE LOGIN ENTRY FOR EXISTING USER
+    await createLoginJournalEntry(user.id);
 
     const token = generateToken(user);
     const { password: _, ...userWithoutPassword } = user;
@@ -115,6 +164,9 @@ const handleGoogleLogin = async (req, res) => {
     });
 
     if (user) {
+      // ✅ CREATE LOGIN ENTRY FOR EXISTING GOOGLE USER
+      await createLoginJournalEntry(user.id);
+      
       const appToken = generateToken(user);
       return res.status(200).json({ message: 'Google Login successful', user: user, token: appToken });
     } else {
@@ -135,6 +187,9 @@ const handleGoogleLogin = async (req, res) => {
           name: true,
         },
       });
+      
+      // ✅ CREATE LOGIN ENTRY FOR NEW GOOGLE USER
+      await createLoginJournalEntry(newUser.id);
 
       const appToken = generateToken(newUser);
       return res.status(201).json({ message: 'User registered via Google successfully', user: newUser, token: appToken });

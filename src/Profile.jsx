@@ -1,4 +1,3 @@
-// lostsoulsaturn08/sat/sat-019c4325342575340607add8b5a7fff4fb04e73f/src/Profile.jsx
 // src/Profile.jsx
 import React, { useState, useEffect } from "react";
 import axios from "axios";
@@ -35,7 +34,6 @@ const Profile = ({ user, onLogout, onAuthError, showArchived, setShowArchived })
   }, [showArchived]);
 
   const handleDpUpload = async (e) => {
-    // ... (rest of the function is unchanged)
     const file = e.target.files[0];
     if (!file) return;
 
@@ -77,7 +75,7 @@ const Profile = ({ user, onLogout, onAuthError, showArchived, setShowArchived })
     }
   };
 
-  // ✅ --- NEW FUNCTION TO SAVE NAME --- ✅
+  // ✅ --- FUNCTION TO SAVE NAME --- ✅
   const handleSaveName = async () => {
     if (!name.trim() || name.trim() === user.name) {
       setIsEditingName(false);

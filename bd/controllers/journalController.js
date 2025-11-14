@@ -4,6 +4,7 @@ const prisma = new PrismaClient();
 
 const createJournalEntry = async (req, res) => {
   const userId = req.user.id;
+  // 'mitigationPlan' comes from the request body
   const { reason, mitigationPlan, taskId } = req.body;
 
   if (!reason || !mitigationPlan) {
@@ -15,7 +16,8 @@ const createJournalEntry = async (req, res) => {
       data: {
         userId,
         reason,
-        mitigationPlan,
+        // FIX: Map 'mitigationPlan' from the request to the 'mitigation' field
+        mitigation: mitigationPlan,
         taskId: taskId ? parseInt(taskId) : null,
       },
     });

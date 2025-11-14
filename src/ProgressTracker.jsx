@@ -1,4 +1,3 @@
-// lostsoulsaturn08/sat/sat-019c4325342575340607add8b5a7fff4fb04e73f/src/ProgressTracker.jsx
 // src/ProgressTracker.jsx
 import React, { useState, useEffect } from "react";
 import Profile from "./Profile";
@@ -38,10 +37,8 @@ const ProgressTracker = () => {
   const [loggedIn, setLoggedIn] = useState(initialUserState.loggedIn);
   const [showArchived, setShowArchived] = useState(false);
   
-  // ✅ --- NEW STATE --- ✅
   // This key will be "bumped" to trigger a refresh in StreakGrid
   const [journalUpdateKey, setJournalUpdateKey] = useState(0);
-  // ✅ ----------------- ✅
 
   const handleLogout = () => {
     setLoggedIn(false);
@@ -55,7 +52,12 @@ const ProgressTracker = () => {
     try {
       const user = JSON.parse(localStorage.getItem('user'));
       if (user && token) {
-         setProfile({ ...user, token });
+         setProfile({ 
+           ...user, 
+           token: token,
+           name: user.name || user.username,
+           forgivenessTokens: user.forgivenessTokens !== undefined ? user.forgivenessTokens : 2 
+         });
          return; 
       }
     } catch (e) { /* Corrupted user data */ }
@@ -63,24 +65,28 @@ const ProgressTracker = () => {
     handleLogout();
   };
   
-  // ✅ --- NEW FUNCTION --- ✅
-  // This function will be called by JournalModal on success
   const handleJournalUpdate = () => {
     setJournalUpdateKey(prevKey => prevKey + 1);
   };
-  // ✅ -------------------- ✅
 
   const handleLogin = (data) => {
     const { user, token } = data;
     const fullProfile = { 
       ...user, 
       token, 
-      name: user.name || user.username 
+      name: user.name || user.username,
+      // Also apply default forgiveness tokens here
+      forgivenessTokens: user.forgivenessTokens !== undefined ? user.forgivenessTokens : 2
     };
     setProfile(fullProfile);
     setLoggedIn(true);
     localStorage.setItem('user', JSON.stringify(user));
     localStorage.setItem('token', token);
+    
+    // --- THIS IS THE FIX ---
+    // Tell the StreakGrid to refetch its data now that we are logged in
+    setJournalUpdateKey(prevKey => prevKey + 1);
+    // --- END OF FIX ---
   };
 
   const addTaskHandler = (newTask) => {
@@ -142,7 +148,7 @@ const ProgressTracker = () => {
           <Profile
             user={profile}
             onLogout={handleLogout}
-            onAuthError={handleProfileRefresh} // This reloads profile state
+            onAuthError={handleProfileRefresh}
             showArchived={showArchived}
             setShowArchived={setShowArchived}
           />
@@ -156,7 +162,7 @@ const ProgressTracker = () => {
           <StreakGrid 
             token={profile.token}
             onAuthError={handleProfileRefresh}
-            journalUpdateKey={journalUpdateKey} // ✅ Pass the key
+            journalUpdateKey={journalUpdateKey} // Pass the key
           />
 
           <TaskCreationForm
@@ -176,7 +182,7 @@ const ProgressTracker = () => {
                 onUnarchive={handleUnarchive}
                 onAuthError={handleProfileRefresh}
                 userProfile={profile}
-                onJournalUpdate={handleJournalUpdate} // ✅ Pass update function
+                onJournalUpdate={handleJournalUpdate} // Pass update function
               />
             ))}
             {tasksToDisplay.length === 0 && (
