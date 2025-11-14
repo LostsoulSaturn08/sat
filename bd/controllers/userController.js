@@ -4,55 +4,13 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const { OAuth2Client } = require('google-auth-library');
 
+// ✅ --- IMPORT THE NEW FUNCTION --- ✅
+const { createLoginJournalEntry } = require('./journalController'); 
+
 const prisma = new PrismaClient();
 const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
-// --- NEW HELPER FUNCTIONS ---
-const getDateKey = (date) => date.toISOString().split('T')[0];
-
-/**
- * Creates a journal entry for login, but only once per day.
- * This will mark the activity heatmap (StreakGrid) for today.
- */
-const createLoginJournalEntry = async (userId) => {
-  const todayKey = getDateKey(new Date());
-  
-  try {
-    const lastLoginEntry = await prisma.journalEntry.findFirst({
-      where: {
-        userId: userId,
-        reason: "User login" // This is a special reason for this entry
-      },
-      orderBy: {
-        createdAt: 'desc'
-      }
-    });
-
-    if (lastLoginEntry) {
-      const lastLoginDateKey = getDateKey(lastLoginEntry.createdAt);
-      if (lastLoginDateKey === todayKey) {
-        // An entry for today already exists, do nothing
-        return;
-      }
-    }
-
-    // No login entry for today, create one
-    await prisma.journalEntry.create({
-      data: {
-        userId: userId,
-        reason: "User login",
-        mitigation: "N/A", // 'mitigation' is required, so we use a placeholder
-        taskId: null
-      }
-    });
-    console.log(`Created login journal entry for user ${userId}`);
-
-  } catch (error) {
-    // Log the error but don't fail the login
-    console.error("Failed to create login journal entry:", error);
-  }
-};
-// --- END OF NEW FUNCTIONS ---
+// ❌ The createLoginJournalEntry helper function has been REMOVED from this file.
 
 const generateToken = (user) => {
   return jwt.sign(
@@ -102,7 +60,7 @@ const loginUser = async (req, res) => {
         },
       });
       
-      // ✅ CREATE LOGIN ENTRY FOR NEW USER
+      // ✅ Use imported function
       await createLoginJournalEntry(newUser.id);
 
       const token = generateToken(newUser);
@@ -114,7 +72,7 @@ const loginUser = async (req, res) => {
       return res.status(401).json({ message: 'Invalid password' });
     }
     
-    // ✅ CREATE LOGIN ENTRY FOR EXISTING USER
+    // ✅ Use imported function
     await createLoginJournalEntry(user.id);
 
     const token = generateToken(user);
@@ -164,7 +122,7 @@ const handleGoogleLogin = async (req, res) => {
     });
 
     if (user) {
-      // ✅ CREATE LOGIN ENTRY FOR EXISTING GOOGLE USER
+      // ✅ Use imported function
       await createLoginJournalEntry(user.id);
       
       const appToken = generateToken(user);
@@ -188,7 +146,7 @@ const handleGoogleLogin = async (req, res) => {
         },
       });
       
-      // ✅ CREATE LOGIN ENTRY FOR NEW GOOGLE USER
+      // ✅ Use imported function
       await createLoginJournalEntry(newUser.id);
 
       const appToken = generateToken(newUser);

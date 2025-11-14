@@ -37,7 +37,6 @@ const ProgressTracker = () => {
   const [loggedIn, setLoggedIn] = useState(initialUserState.loggedIn);
   const [showArchived, setShowArchived] = useState(false);
   
-  // This key will be "bumped" to trigger a refresh in StreakGrid
   const [journalUpdateKey, setJournalUpdateKey] = useState(0);
 
   const handleLogout = () => {
@@ -75,7 +74,6 @@ const ProgressTracker = () => {
       ...user, 
       token, 
       name: user.name || user.username,
-      // Also apply default forgiveness tokens here
       forgivenessTokens: user.forgivenessTokens !== undefined ? user.forgivenessTokens : 2
     };
     setProfile(fullProfile);
@@ -83,10 +81,8 @@ const ProgressTracker = () => {
     localStorage.setItem('user', JSON.stringify(user));
     localStorage.setItem('token', token);
     
-    // --- THIS IS THE FIX ---
     // Tell the StreakGrid to refetch its data now that we are logged in
-    setJournalUpdateKey(prevKey => prevKey + 1);
-    // --- END OF FIX ---
+    handleJournalUpdate(); // This bumps the key
   };
 
   const addTaskHandler = (newTask) => {
@@ -109,15 +105,29 @@ const ProgressTracker = () => {
     ));
   };
 
+  // ✅ --- THIS IS THE FIX --- ✅
   useEffect(() => {
     if (!loggedIn || !profile?.token) return;
 
-    const fetchTasks = async () => {
+    const loadAppData = async () => {
       try {
+        // 1. Tell backend we've loaded the app. This creates the journal entry.
+        // We run this in parallel with fetching tasks.
+        axios.post(
+          "http://localhost:5000/api/journal/app-load", 
+          {}, // Empty body
+          { headers: { Authorization: `Bearer ${profile.token}` } }
+        ).then(() => {
+          // 2. Once the backend confirms, force the grid to update.
+          handleJournalUpdate();
+        });
+
+        // 3. Fetch tasks as usual
         const res = await axios.get("http://localhost:5000/api/tasks", {
           headers: { Authorization: `Bearer ${profile.token}` },
         });
         setTasks(res.data);
+        
       } catch (err) {
         if (err.response && err.response.status === 401) {
           handleLogout();
@@ -125,8 +135,9 @@ const ProgressTracker = () => {
       }
     };
     
-    fetchTasks();
-  }, [loggedIn, profile?.token]); 
+    loadAppData();
+  }, [loggedIn, profile?.token]); // This effect runs when state is loaded
+  // ✅ --- END OF FIX --- ✅
   
   useEffect(() => {
     if (!loggedIn) {

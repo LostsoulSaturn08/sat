@@ -1,4 +1,3 @@
-// lostsoulsaturn08/sat/sat-019c4325342575340607add8b5a7fff4fb04e73f/src/StreakGrid.jsx
 // src/StreakGrid.jsx
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
@@ -40,7 +39,11 @@ const StreakGrid = ({ token, onAuthError, journalUpdateKey }) => {
     };
 
     fetchJournalEntries();
-  }, [token, onAuthError, journalUpdateKey]); // ✅ Add journalUpdateKey to dependency array
+  // --- THIS IS THE FIX ---
+  // By adding journalUpdateKey, this effect re-runs when you log in,
+  // fetching the new "User login" entry created by the backend.
+  }, [token, onAuthError, journalUpdateKey]);
+  // --- END OF FIX ---
 
   // Get start date for the last 6 months
   const sixMonthsAgo = new Date();
