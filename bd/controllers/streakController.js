@@ -81,30 +81,6 @@ const applyForgiveness = async (req, res) => {
   }
 };
 
-const simulateMissedDay = async (req, res) => {
-  const userId = req.user.id;
-  const { days, count } = req.body; 
-  const daysToSkip = days ? parseInt(days) : 2;
-  const newCount = count ? parseInt(count) : undefined;
-
-  try {
-    let streak = await prisma.streak.findUnique({ where: { userId } });
-    if (!streak) streak = await prisma.streak.create({ data: { userId, count: 1, lastUpdated: new Date() } });
-
-    const pastDate = new Date();
-    pastDate.setDate(pastDate.getDate() - daysToSkip);
-
-    const dataToUpdate = { lastUpdated: pastDate };
-    if (newCount !== undefined) dataToUpdate.count = newCount;
-
-    const updated = await prisma.streak.update({ where: { id: streak.id }, data: dataToUpdate });
-    res.json({ message: `Rewound ${daysToSkip} days.`, streak: updated });
-  } catch (error) {
-    res.status(500).json({ message: "Error simulating missed day" });
-  }
-};
-
-// ✅ UPDATED: Accepts reason/mitigation and saves entry for specific date
 const recoverStreakDay = async (req, res) => {
   const userId = req.user.id;
   const { date, reason, mitigation } = req.body;
@@ -133,9 +109,9 @@ const recoverStreakDay = async (req, res) => {
       prisma.journalEntry.create({
         data: {
           userId: userId,
-          reason: reason,          // ✅ User input
-          mitigation: mitigation,  // ✅ User input
-          createdAt: targetDate    // ✅ Back-dated
+          reason: reason,          
+          mitigation: mitigation,  
+          createdAt: targetDate    
         }
       })
     ]);
@@ -152,4 +128,24 @@ const recoverStreakDay = async (req, res) => {
   }
 };
 
-module.exports = { getStreaks, applyForgiveness, updateGlobalStreak, simulateMissedDay, recoverStreakDay };
+// ✅ KEEPING THIS to fix your "tokens are empty" issue
+const refillTokens = async (req, res) => {
+  const userId = req.user.id;
+  try {
+    const updatedUser = await prisma.user.update({
+      where: { id: userId },
+      data: { forgivenessTokens: 5 } 
+    });
+    res.json({ message: "Tokens refilled to 5.", tokens: updatedUser.forgivenessTokens });
+  } catch (error) {
+    res.status(500).json({ message: "Error refilling tokens" });
+  }
+};
+
+module.exports = { 
+  getStreaks, 
+  applyForgiveness, 
+  updateGlobalStreak, 
+  recoverStreakDay,
+  refillTokens 
+};
