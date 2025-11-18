@@ -1,80 +1,110 @@
-// src/StreakGrid.jsx
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import CalendarHeatmap from 'react-calendar-heatmap';
 import { Tooltip } from 'react-tooltip';
+import { FaMagic, FaTimes } from 'react-icons/fa';
+import JournalModal from './JournalModal'; // ✅ Import Modal
 
-// ✅ Accept journalUpdateKey
-const StreakGrid = ({ token, onAuthError, journalUpdateKey }) => {
+const getAllDatesInRange = (startDate, endDate) => {
+  const dates = [];
+  let currentDate = new Date(startDate);
+  while (currentDate <= endDate) {
+    dates.push(new Date(currentDate).toISOString().split('T')[0]);
+    currentDate.setDate(currentDate.getDate() + 1);
+  }
+  return dates;
+};
+
+const StreakGrid = ({ token, userProfile, onAuthError, journalUpdateKey, onUpdateUser }) => {
   const [heatmapData, setHeatmapData] = useState([]);
+  const [recoveryMode, setRecoveryMode] = useState(false);
+  
+  // ✅ Modal State for Recovery
+  const [selectedDate, setSelectedDate] = useState(null);
+
+  const endDate = new Date();
+  const startDate = new Date();
+  startDate.setMonth(startDate.getMonth() - 6);
 
   useEffect(() => {
     if (!token) return;
-
     const fetchJournalEntries = async () => {
       try {
         const res = await axios.get("http://localhost:5000/api/journal", {
           headers: { Authorization: `Bearer ${token}` },
         });
-
-        // Process data for the heatmap
         const counts = {};
         res.data.forEach(entry => {
           const date = entry.createdAt.split('T')[0];
           counts[date] = (counts[date] || 0) + 1;
         });
-
-        const data = Object.keys(counts).map(date => ({
-          date: date,
-          count: counts[date],
-        }));
-        
+        const allDates = getAllDatesInRange(startDate, endDate);
+        const data = allDates.map(date => ({ date: date, count: counts[date] || 0 }));
         setHeatmapData(data);
-
       } catch (err) {
-        if (err.response && err.response.status === 401) {
-          onAuthError();
-        }
+        if (err.response && err.response.status === 401) onAuthError();
       }
     };
-
     fetchJournalEntries();
-  // --- THIS IS THE FIX ---
-  // By adding journalUpdateKey, this effect re-runs when you log in,
-  // fetching the new "User login" entry created by the backend.
   }, [token, onAuthError, journalUpdateKey]);
-  // --- END OF FIX ---
 
-  // Get start date for the last 6 months
-  const sixMonthsAgo = new Date();
-  sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+  const handleDayClick = (value) => {
+    if (!recoveryMode || !value) return;
+    if (new Date(value.date) > new Date()) return alert("Cannot recover future dates.");
+    if (value.count > 0) return alert("This day is already complete!");
+
+    // ✅ Open Modal instead of instant confirm
+    setSelectedDate(value.date);
+  };
 
   return (
-    <div className="mb-10 p-6 bg-gray-800 rounded-xl border border-primary-500/50">
-      <h2 className="text-3xl font-bold text-primary-500 mb-4">Activity</h2>
-      <CalendarHeatmap
-        startDate={sixMonthsAgo}
-        endDate={new Date()}
-        values={heatmapData}
-        classForValue={(value) => {
-          if (!value) {
-            return 'color-empty';
-          }
-          if (value.count >= 4) return 'color-scale-4';
-          if (value.count >= 2) return 'color-scale-2';
-          return 'color-scale-1';
-        }}
-        tooltipDataAttrs={(value) => {
-          if (!value || !value.date) return null;
-          const count = value.count || 0;
-          return {
-            'data-tooltip-id': 'heatmap-tooltip',
-            'data-tooltip-content': `${value.date}: ${count} journal entr${count === 1 ? 'y' : 'ies'}`,
-          };
-        }}
-      />
-      <Tooltip id="heatmap-tooltip" />
-    </div>
+    <>
+      {/* ✅ Recovery Journal Modal */}
+      {selectedDate && (
+        <JournalModal 
+            token={token}
+            userProfile={userProfile} // Needs tokens count
+            recoveryDate={selectedDate} // Triggers Recovery Mode
+            onClose={() => setSelectedDate(null)}
+            onAuthError={onAuthError}
+            onForgiveSuccess={(updates) => {
+                onUpdateUser(updates); // Update parent token count
+                setHeatmapData(prev => prev.map(d => d.date === selectedDate ? { ...d, count: 1 } : d)); // Visual Update
+                setSelectedDate(null); // Close modal
+            }}
+        />
+      )}
+
+      <div className={`mb-10 p-6 rounded-xl border transition-colors duration-300 ${recoveryMode ? 'bg-indigo-900/30 border-indigo-500' : 'bg-gray-800 border-primary-500/50'}`}>
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-3xl font-bold text-primary-500">Activity</h2>
+          <button 
+            onClick={() => setRecoveryMode(!recoveryMode)}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg font-bold transition-all ${recoveryMode ? "bg-red-600 hover:bg-red-700 text-white" : "bg-indigo-600 hover:bg-indigo-700 text-white"}`}
+          >
+            {recoveryMode ? <><FaTimes /> Exit Recovery</> : <><FaMagic /> Recover Missed Days</>}
+          </button>
+        </div>
+        
+        {recoveryMode && <p className="text-center text-indigo-300 mb-4 animate-pulse">Select a gray square to recover that day.</p>}
+
+        <CalendarHeatmap
+          startDate={startDate}
+          endDate={endDate}
+          values={heatmapData}
+          onClick={handleDayClick}
+          classForValue={(value) => {
+            if (!value || value.count === 0) return 'color-empty cursor-pointer hover:opacity-80';
+            return `color-scale-${Math.min(value.count, 4)} cursor-pointer`;
+          }}
+          tooltipDataAttrs={(value) => {
+            if (!value || !value.date) return null;
+            return { 'data-tooltip-id': 'heatmap-tooltip', 'data-tooltip-content': `${value.date}: ${value.count} entries` };
+          }}
+        />
+        <Tooltip id="heatmap-tooltip" />
+      </div>
+    </>
   );
 };
 

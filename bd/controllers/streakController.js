@@ -1,158 +1,155 @@
-// bd/controllers/streakController.js (REWRITTEN)
-
 const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
 
-// Helper to get date strings (YYYY-MM-DD)
 const getDateKey = (date) => date.toISOString().split('T')[0];
-
-// Helper to get yesterday's date string
 const getYesterdayKey = () => {
-  const yesterday = new Date();
-  yesterday.setDate(yesterday.getDate() - 1);
-  return getDateKey(yesterday);
+  const d = new Date();
+  d.setDate(d.getDate() - 1);
+  return getDateKey(d);
 };
 
-/**
- * This is NOT a route handler.
- * It's a helper function called by taskController when a task is completed.
- */
-const updateStreakOnTaskCompletion = async (userId, taskId) => {
+const updateGlobalStreak = async (userId) => {
   const todayKey = getDateKey(new Date());
-  let streak_broken = false;
 
   try {
-    const streak = await prisma.streak.findUnique({
-      where: { userId_taskId: { userId, taskId } },
-    });
+    let streak = await prisma.streak.findUnique({ where: { userId } });
 
     if (!streak) {
-      // No streak exists, create a new one
       await prisma.streak.create({
-        data: {
-          userId,
-          taskId,
-          count: 1,
-          lastUpdated: new Date(),
-        },
+        data: { userId, count: 1, lastUpdated: new Date() }
       });
       return { streak_broken: false };
     }
 
-    // Streak exists, check last update
     const lastUpdatedKey = getDateKey(streak.lastUpdated);
 
-    if (lastUpdatedKey === todayKey) {
-      // Already completed today, do nothing
-      return { streak_broken: false };
-    }
+    if (lastUpdatedKey === todayKey) return { streak_broken: false };
 
     if (lastUpdatedKey === getYesterdayKey()) {
-      // Streak continued, increment count
       await prisma.streak.update({
         where: { id: streak.id },
-        data: {
-          count: streak.count + 1,
-          lastUpdated: new Date(),
-        },
+        data: { count: streak.count + 1, lastUpdated: new Date() }
       });
       return { streak_broken: false };
     }
 
-    // Streak was broken (last updated before yesterday)
-    // Reset count to 1
     await prisma.streak.update({
       where: { id: streak.id },
-      data: {
-        count: 1,
-        lastUpdated: new Date(),
-      },
+      data: { prevCount: streak.count, count: 1, lastUpdated: new Date() }
     });
-    // Return flag to notify frontend
-    return { streak_broken: true };
+    return { streak_broken: true }; 
 
   } catch (error) {
-    console.error("Error updating streak:", error);
-    // Don't block task update, just log the streak error
-    return { streak_broken: false }; 
+    console.error("Streak update error:", error);
+    return { streak_broken: false };
   }
 };
 
-/**
- * ROUTE HANDLER: /api/streaks
- * Gets all per-task streaks for the logged-in user.
- */
 const getStreaks = async (req, res) => {
   try {
-    const streaks = await prisma.streak.findMany({
-      where: { userId: req.user.id },
-    });
-    res.json(streaks);
+    const streak = await prisma.streak.findUnique({ where: { userId: req.user.id } });
+    res.json(streak ? [streak] : []);
   } catch (error) {
-    console.error("Error fetching streaks:", error);
-    res.status(500).json({ message: "Failed to get streaks" });
+    res.status(500).json({ message: "Error fetching streak" });
   }
 };
 
-/**
- * ROUTE HANDLER: /api/streaks/forgive
- * Applies a forgiveness token to a task's streak.
- */
 const applyForgiveness = async (req, res) => {
   const userId = req.user.id;
-  const { taskId } = req.body;
+  try {
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (user.forgivenessTokens <= 0) return res.status(403).json({ message: "No tokens left" });
 
-  if (!taskId) {
-    return res.status(400).json({ message: "Task ID is required" });
+    const streak = await prisma.streak.findUnique({ where: { userId } });
+    if (!streak) return res.status(404).json({ message: "No streak to forgive" });
+
+    const restoredCount = (streak.prevCount || 0) + 1;
+
+    const [updatedUser, updatedStreak] = await prisma.$transaction([
+      prisma.user.update({ where: { id: userId }, data: { forgivenessTokens: user.forgivenessTokens - 1 } }),
+      prisma.streak.update({ where: { id: streak.id }, data: { count: restoredCount } })
+    ]);
+
+    res.json({ 
+      message: "Global streak forgiven", 
+      forgivenessTokens: updatedUser.forgivenessTokens,
+      streak: updatedStreak
+    });
+
+  } catch (error) {
+    res.status(500).json({ message: "Server error" });
   }
+};
+
+const simulateMissedDay = async (req, res) => {
+  const userId = req.user.id;
+  const { days, count } = req.body; 
+  const daysToSkip = days ? parseInt(days) : 2;
+  const newCount = count ? parseInt(count) : undefined;
+
+  try {
+    let streak = await prisma.streak.findUnique({ where: { userId } });
+    if (!streak) streak = await prisma.streak.create({ data: { userId, count: 1, lastUpdated: new Date() } });
+
+    const pastDate = new Date();
+    pastDate.setDate(pastDate.getDate() - daysToSkip);
+
+    const dataToUpdate = { lastUpdated: pastDate };
+    if (newCount !== undefined) dataToUpdate.count = newCount;
+
+    const updated = await prisma.streak.update({ where: { id: streak.id }, data: dataToUpdate });
+    res.json({ message: `Rewound ${daysToSkip} days.`, streak: updated });
+  } catch (error) {
+    res.status(500).json({ message: "Error simulating missed day" });
+  }
+};
+
+// ✅ UPDATED: Accepts reason/mitigation and saves entry for specific date
+const recoverStreakDay = async (req, res) => {
+  const userId = req.user.id;
+  const { date, reason, mitigation } = req.body;
+
+  if (!date || !reason || !mitigation) return res.status(400).json({ message: "All fields required." });
 
   try {
     const user = await prisma.user.findUnique({ where: { id: userId } });
-    
-    if (user.forgivenessTokens <= 0) {
-      return res.status(403).json({ message: "No forgiveness tokens remaining" });
-    }
+    if (user.forgivenessTokens <= 0) return res.status(403).json({ message: "No tokens left." });
 
-    const streak = await prisma.streak.findUnique({
-      where: { userId_taskId: { userId, taskId: parseInt(taskId) } },
+    const targetDate = new Date(date);
+    const nextDate = new Date(targetDate);
+    nextDate.setDate(nextDate.getDate() + 1);
+
+    const existingEntry = await prisma.journalEntry.findFirst({
+      where: { userId: userId, createdAt: { gte: targetDate, lt: nextDate } }
     });
 
-    if (!streak) {
-      return res.status(404).json({ message: "No streak found for this task" });
-    }
+    if (existingEntry) return res.status(400).json({ message: "Day already has activity." });
 
-    // "Mend" the streak by pretending the last update was yesterday
-    // and incrementing the count.
+    const streak = await prisma.streak.findUnique({ where: { userId } });
+    
     const [updatedUser, updatedStreak] = await prisma.$transaction([
-      prisma.user.update({
-        where: { id: userId },
-        data: { forgivenessTokens: user.forgivenessTokens - 1 },
-      }),
-      prisma.streak.update({
-        where: { id: streak.id },
+      prisma.user.update({ where: { id: userId }, data: { forgivenessTokens: { decrement: 1 } } }),
+      prisma.streak.update({ where: { id: streak.id }, data: { count: { increment: 1 } } }),
+      prisma.journalEntry.create({
         data: {
-          // This is the core logic: we restore the count and set update to now
-          count: streak.count + 1, 
-          lastUpdated: new Date(),
-        },
-      }),
+          userId: userId,
+          reason: reason,          // ✅ User input
+          mitigation: mitigation,  // ✅ User input
+          createdAt: targetDate    // ✅ Back-dated
+        }
+      })
     ]);
 
-    res.json({
-      message: "Streak forgiven",
-      streak: updatedStreak,
-      forgivenessTokens: updatedUser.forgivenessTokens,
+    res.json({ 
+      message: "Day recovered!", 
+      tokens: updatedUser.forgivenessTokens, 
+      streakCount: updatedStreak.count 
     });
 
   } catch (error) {
-    console.error("Error applying forgiveness:", error);
-    res.status(500).json({ message: "Server error during forgiveness" });
+    console.error("Recovery error:", error);
+    res.status(500).json({ message: "Server error during recovery." });
   }
 };
 
-
-module.exports = {
-  getStreaks,
-  applyForgiveness,
-  updateStreakOnTaskCompletion, // Export for taskController
-};
+module.exports = { getStreaks, applyForgiveness, updateGlobalStreak, simulateMissedDay, recoverStreakDay };

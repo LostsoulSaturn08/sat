@@ -1,4 +1,3 @@
-// src/ProgressTracker.jsx
 import React, { useState, useEffect } from "react";
 import Profile from "./Profile";
 import Login from "./Login";
@@ -6,6 +5,7 @@ import TaskCard from "./TaskCard";
 import axios from "axios";
 import TaskCreationForm from "./TaskCreationForm";
 import StreakGrid from "./StreakGrid";
+import JournalModal from "./JournalModal"; 
 import './JournalModal.css'; 
 import './StreakGrid.css';
 
@@ -14,17 +14,9 @@ const getInitialUserState = () => {
   const storedToken = localStorage.getItem('token');
   if (storedUser && storedToken) {
     try {
-      const user = JSON.parse(storedUser);
-      const profile = { 
-        ...user, 
-        token: storedToken,
-        name: user.name || user.username,
-        forgivenessTokens: user.forgivenessTokens !== undefined ? user.forgivenessTokens : 2 
-      };
-      return { loggedIn: true, profile: profile };
+      return { loggedIn: true, profile: { ...JSON.parse(storedUser), token: storedToken } };
     } catch (e) {
-      localStorage.removeItem('user');
-      localStorage.removeItem('token');
+      localStorage.clear();
     }
   }
   return { loggedIn: false, profile: null };
@@ -32,175 +24,78 @@ const getInitialUserState = () => {
 
 const ProgressTracker = () => {
   const [tasks, setTasks] = useState([]);
-  const initialUserState = getInitialUserState();
-  const [profile, setProfile] = useState(initialUserState.profile);
-  const [loggedIn, setLoggedIn] = useState(initialUserState.loggedIn);
-  const [showArchived, setShowArchived] = useState(false);
-  
+  const { loggedIn: initLog, profile: initProf } = getInitialUserState();
+  const [profile, setProfile] = useState(initProf);
+  const [loggedIn, setLoggedIn] = useState(initLog);
   const [journalUpdateKey, setJournalUpdateKey] = useState(0);
+  const [showGlobalModal, setShowGlobalModal] = useState(false);
 
-  const handleLogout = () => {
-    setLoggedIn(false);
-    setProfile(null);
-    localStorage.removeItem('user');
-    localStorage.removeItem('token');
-  };
-
-  const handleProfileRefresh = () => {
-    const token = localStorage.getItem('token');
-    try {
-      const user = JSON.parse(localStorage.getItem('user'));
-      if (user && token) {
-         setProfile({ 
-           ...user, 
-           token: token,
-           name: user.name || user.username,
-           forgivenessTokens: user.forgivenessTokens !== undefined ? user.forgivenessTokens : 2 
-         });
-         return; 
-      }
-    } catch (e) { /* Corrupted user data */ }
-    
-    handleLogout();
-  };
-  
-  const handleJournalUpdate = () => {
-    setJournalUpdateKey(prevKey => prevKey + 1);
-  };
+  const handleLogout = () => { setLoggedIn(false); setProfile(null); localStorage.clear(); };
 
   const handleLogin = (data) => {
-    const { user, token } = data;
-    const fullProfile = { 
-      ...user, 
-      token, 
-      name: user.name || user.username,
-      forgivenessTokens: user.forgivenessTokens !== undefined ? user.forgivenessTokens : 2
-    };
-    setProfile(fullProfile);
+    setProfile({ ...data.user, token: data.token });
     setLoggedIn(true);
-    localStorage.setItem('user', JSON.stringify(user));
-    localStorage.setItem('token', token);
-    
-    // Tell the StreakGrid to refetch its data now that we are logged in
-    handleJournalUpdate(); // This bumps the key
+    localStorage.setItem('user', JSON.stringify(data.user));
+    localStorage.setItem('token', data.token);
   };
 
-  const addTaskHandler = (newTask) => {
-    setTasks((prev) => [...prev, newTask]);
+  const refreshData = () => setJournalUpdateKey(k => k + 1);
+
+  const handleUserUpdate = (updates) => {
+    const updatedProfile = { ...profile, ...updates };
+    setProfile(updatedProfile);
+    localStorage.setItem('user', JSON.stringify(updatedProfile));
+    refreshData();
   };
 
-  const handleRemove = (removedTask) => {
-    setTasks((prev) => prev.filter((t) => t.id !== removedTask.id));
-  };
-
-  const handleArchive = (archivedTask) => {
-    setTasks((prev) => prev.map(t =>
-      t.id === archivedTask.id ? archivedTask : t
-    ));
-  };
-
-  const handleUnarchive = (unarchivedTask) => {
-     setTasks((prev) => prev.map(t =>
-      t.id === unarchivedTask.id ? unarchivedTask : t
-    ));
-  };
-
-  // ✅ --- THIS IS THE FIX --- ✅
   useEffect(() => {
     if (!loggedIn || !profile?.token) return;
-
-    const loadAppData = async () => {
+    const initApp = async () => {
       try {
-        // 1. Tell backend we've loaded the app. This creates the journal entry.
-        // We run this in parallel with fetching tasks.
-        axios.post(
-          "http://localhost:5000/api/journal/app-load", 
-          {}, // Empty body
-          { headers: { Authorization: `Bearer ${profile.token}` } }
-        ).then(() => {
-          // 2. Once the backend confirms, force the grid to update.
-          handleJournalUpdate();
-        });
-
-        // 3. Fetch tasks as usual
-        const res = await axios.get("http://localhost:5000/api/tasks", {
-          headers: { Authorization: `Bearer ${profile.token}` },
-        });
-        setTasks(res.data);
-        
-      } catch (err) {
-        if (err.response && err.response.status === 401) {
-          handleLogout();
-        }
-      }
+        const streakRes = await axios.post("http://localhost:5000/api/journal/app-load", {}, { headers: { Authorization: `Bearer ${profile.token}` } });
+        if (streakRes.data.streak_broken) setShowGlobalModal(true);
+        const taskRes = await axios.get("http://localhost:5000/api/tasks", { headers: { Authorization: `Bearer ${profile.token}` } });
+        setTasks(taskRes.data);
+        refreshData();
+      } catch (err) { if (err.response && err.response.status === 401) handleLogout(); }
     };
-    
-    loadAppData();
-  }, [loggedIn, profile?.token]); // This effect runs when state is loaded
-  // ✅ --- END OF FIX --- ✅
-  
-  useEffect(() => {
-    if (!loggedIn) {
-      setTasks([]);
-    }
+    initApp();
   }, [loggedIn]);
-
-  const tasksToDisplay = tasks.filter(task =>
-    showArchived ? task.archived : !task.archived
-  );
 
   return (
     <div className="relative p-8 bg-gray-900 text-white min-h-screen font-sans">
+      {showGlobalModal && (
+        <JournalModal
+          token={profile.token}
+          userProfile={profile}
+          onClose={() => setShowGlobalModal(false)}
+          onAuthError={handleLogout}
+          onForgiveSuccess={(updatedUser) => {
+            handleUserUpdate(updatedUser);
+            setShowGlobalModal(false);
+          }}
+          onJournalUpdate={refreshData}
+        />
+      )}
       <div className="flex justify-between items-center mb-6 border-b border-primary-500/50 pb-4">
-        <h1 className="text-5xl font-extrabold text-primary-500">
-          Progress Tracker
-        </h1>
-        {loggedIn && (
-          <Profile
-            user={profile}
-            onLogout={handleLogout}
-            onAuthError={handleProfileRefresh}
-            showArchived={showArchived}
-            setShowArchived={setShowArchived}
-          />
-        )}
+        <h1 className="text-5xl font-extrabold text-primary-500">Progress Tracker</h1>
+        {loggedIn && <Profile user={profile} onLogout={handleLogout} onAuthError={handleLogout} />}
       </div>
-
-      {!loggedIn ? (
-        <Login onLogin={handleLogin} />
-      ) : (
+      {!loggedIn ? <Login onLogin={handleLogin} /> : (
         <>
+          {/* ✅ Passes 'profile' to Grid so Modal can see token count */}
           <StreakGrid 
-            token={profile.token}
-            onAuthError={handleProfileRefresh}
-            journalUpdateKey={journalUpdateKey} // Pass the key
+            token={profile.token} 
+            userProfile={profile} 
+            onAuthError={handleLogout} 
+            journalUpdateKey={journalUpdateKey} 
+            onUpdateUser={handleUserUpdate} 
           />
-
-          <TaskCreationForm
-            token={profile.token}
-            onAddTask={addTaskHandler}
-            onAuthError={handleProfileRefresh}
-          />
-          
+          <TaskCreationForm token={profile.token} onAddTask={t => setTasks(p => [...p, t])} onAuthError={handleLogout} />
           <div className="grid grid-cols-1 sm:g:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            {tasksToDisplay.map((task) => (
-              <TaskCard
-                key={task.id}
-                task={task}
-                token={profile.token}
-                onRemove={handleRemove}
-                onArchive={handleArchive}
-                onUnarchive={handleUnarchive}
-                onAuthError={handleProfileRefresh}
-                userProfile={profile}
-                onJournalUpdate={handleJournalUpdate} // Pass update function
-              />
+            {tasks.map((task) => (
+              <TaskCard key={task.id} task={task} token={profile.token} onRemove={t => setTasks(p => p.filter(x => x.id !== t.id))} onAuthError={handleLogout} />
             ))}
-            {tasksToDisplay.length === 0 && (
-              <p className="text-gray-500 text-lg col-span-full text-center py-10">
-                No {showArchived ? "archived" : "active"} quests found.
-              </p>
-            )}
           </div>
         </>
       )}

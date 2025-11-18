@@ -1,216 +1,130 @@
-// src/Profile.jsx
 import React, { useState, useEffect } from "react";
 import axios from "axios";
-import { FaEdit, FaSave, FaTimes } from "react-icons/fa"; // ✅ Import icons
+import { FaEdit, FaSave, FaTimes, FaFire } from "react-icons/fa";
 
-const Profile = ({ user, onLogout, onAuthError, showArchived, setShowArchived }) => {
+const Profile = ({ user, onLogout, onAuthError }) => {
   const [dp, setDp] = useState(user?.dp || "");
   const [isOpen, setIsOpen] = useState(false);
-  const [archive, setArchive] = useState([]);
-
-  // ✅ --- NEW STATE FOR NAME EDIT --- ✅
+  const [journalHistory, setJournalHistory] = useState([]);
+  const [showJournal, setShowJournal] = useState(false);
   const [isEditingName, setIsEditingName] = useState(false);
   const [name, setName] = useState(user?.name || user?.username);
-  // ✅ --------------------------------- ✅
+  
+  // ✅ New State for displaying live streak
+  const [liveStreak, setLiveStreak] = useState(0);
 
+  useEffect(() => { setDp(user?.dp || ""); setName(user?.name || user?.username); }, [user]);
+  
+  // ✅ Fetch streak on open
   useEffect(() => {
-    setDp(user?.dp || "");
-    setName(user?.name || user?.username); // ✅ Update name state if user prop changes
-  }, [user]);
-
-  const getImageUrl = (path) => {
-    return path ? `http://localhost:5000${path}` : "/default-avatar.png";
-  };
-
-  const loadArchive = () => {
-    const history = JSON.parse(localStorage.getItem("taskHistory")) || [];
-    setArchive(history);
-  };
-
-  useEffect(() => {
-    if (showArchived) {
-      loadArchive();
+    if (isOpen && user.token) {
+      axios.get("http://localhost:5000/api/streaks", { headers: { Authorization: `Bearer ${user.token}` } })
+        .then(res => setLiveStreak(res.data?.count || 0))
+        .catch(console.error);
     }
-  }, [showArchived]);
+  }, [isOpen, user.token]);
+
+  const getImageUrl = (path) => path ? `http://localhost:5000${path}` : "/default-avatar.png";
+
+  const toggleJournal = async () => {
+    if (!showJournal) {
+      try {
+        const res = await axios.get("http://localhost:5000/api/journal", { headers: { Authorization: `Bearer ${user.token}` } });
+        setJournalHistory(res.data);
+      } catch (e) {}
+    }
+    setShowJournal(!showJournal);
+  };
 
   const handleDpUpload = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-
-    if (file.size > 2 * 1024 * 1024) {
-      alert("File size must be under 2MB");
-      return;
-    }
-
-    const formData = new FormData();
-    formData.append("profileImage", file);
-
+    const file = e.target.files[0]; if(!file) return;
+    const formData = new FormData(); formData.append("profileImage", file);
     try {
-      const response = await axios.post(
-        "http://localhost:5000/api/upload-profile-image",
-        formData,
-        {
-          headers: {
-            'Authorization': `Bearer ${user.token}`,
-            'Content-Type': 'multipart/form-data',
-          },
-        }
-      );
-
-      const data = response.data;
-      setDp(data.imageUrl);
-      
-      const updatedUser = { ...user, dp: data.imageUrl, name: data.user.name };
-      localStorage.setItem('user', JSON.stringify(updatedUser));
-      onAuthError(); // Trigger profile refresh
-
-    } catch (err) {
-      console.error("Upload error:", err);
-      if (err.response && err.response.status === 401) {
-        onAuthError();
-        alert("Your session expired. Please log in again.");
-      } else {
-        alert(err.response?.data?.error || "An error occurred during upload");
-      }
-    }
+      const res = await axios.post("http://localhost:5000/api/upload-profile-image", formData, { headers: { 'Authorization': `Bearer ${user.token}`, 'Content-Type': 'multipart/form-data' } });
+      const updatedUser = { ...user, dp: res.data.imageUrl };
+      localStorage.setItem('user', JSON.stringify(updatedUser)); onAuthError();
+    } catch (e) {}
   };
 
-  // ✅ --- FUNCTION TO SAVE NAME --- ✅
   const handleSaveName = async () => {
-    if (!name.trim() || name.trim() === user.name) {
-      setIsEditingName(false);
-      setName(user.name || user.username); // Reset if invalid or unchanged
-      return;
-    }
-    
     try {
-      const response = await axios.patch(
-        "http://localhost:5000/api/profile/name",
-        { name: name.trim() },
+      const res = await axios.patch("http://localhost:5000/api/profile/name", { name }, { headers: { Authorization: `Bearer ${user.token}` } });
+      localStorage.setItem('user', JSON.stringify({ ...user, name: res.data.user.name }));
+      setIsEditingName(false); onAuthError();
+    } catch (e) {}
+  };
+
+  // ✅ GOD MODE
+  const handleGodMode = async () => {
+    const countInput = prompt("Enter the Streak Count you want (e.g. 50):", "50");
+    if (countInput === null) return;
+    const daysInput = prompt("Enter how many days ago you last logged in (e.g. 5):", "5");
+    if (daysInput === null) return;
+
+    try {
+      await axios.post("http://localhost:5000/api/streaks/debug/skip-day", 
+        { count: countInput, days: daysInput }, 
         { headers: { Authorization: `Bearer ${user.token}` } }
       );
-      
-      const updatedUser = response.data.user;
-      localStorage.setItem('user', JSON.stringify(updatedUser)); // Update local storage
-      onAuthError(); // Trigger parent profile refresh
-      setIsEditingName(false); // Exit edit mode
-      
-    } catch (err) {
-      console.error("Name update error:", err);
-      if (err.response && err.response.status === 401) onAuthError();
-      alert(err.response?.data?.error || "Failed to update name.");
-    }
+      alert(`Done! Set streak to ${countInput} and rewound ${daysInput} days.\n\nPage will reload to trigger the 'Streak Broken' check.`);
+      window.location.reload(); 
+    } catch (e) { alert("Simulation failed."); }
   };
-  // ✅ ---------------------------------- ✅
 
   return (
     <div className="relative">
-      <button
-        onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center space-x-2 p-2 rounded-lg bg-gray-800 hover:bg-gray-700 transition-all"
-      >
-        <img
-          src={getImageUrl(dp)}
-          alt="Profile"
-          className="w-12 h-12 object-cover rounded-full border-2 border-blue-500"
-        />
+      <button onClick={() => setIsOpen(!isOpen)} className="flex items-center space-x-2 p-2 rounded-lg bg-gray-800 hover:bg-gray-700">
+        <img src={getImageUrl(dp)} alt="Profile" className="w-12 h-12 object-cover rounded-full border-2 border-blue-500" />
         <span className="text-white font-bold">{user?.name || user?.username}</span>
       </button>
 
       {isOpen && (
         <div className="fixed inset-0 bg-black bg-opacity-75 backdrop-blur-lg flex justify-center items-center z-50">
-          <div className="bg-gray-900 text-white rounded-lg shadow-lg p-6 w-96 border border-primary-500/50">
-            <label className="relative cursor-pointer block w-24 h-24 mx-auto">
-              <img
-                src={getImageUrl(dp)}
-                alt="Profile"
-                className="w-24 h-24 rounded-full object-cover border-2 border-blue-500"
-              />
+          <div className="bg-gray-900 text-white rounded-lg shadow-lg p-6 w-96 border border-primary-500/50 max-h-[90vh] overflow-y-auto">
+             <label className="relative cursor-pointer block w-24 h-24 mx-auto">
+              <img src={getImageUrl(dp)} alt="Profile" className="w-24 h-24 rounded-full object-cover border-2 border-blue-500" />
               <input type="file" className="hidden" onChange={handleDpUpload} />
-              <div className="absolute bottom-0 right-0 bg-blue-500 text-white p-1 rounded-full text-xs">
-                📷
-              </div>
             </label>
-
-            {/* ✅ --- EDITABLE NAME FIELD --- ✅ */}
             {!isEditingName ? (
-              <div className="flex items-center justify-center gap-2 mt-3">
-                <p className="text-xl font-bold text-center">{name}</p>
-                <button 
-                  onClick={() => setIsEditingName(true)} 
-                  className="p-1 text-gray-400 hover:text-white"
-                >
-                  <FaEdit />
-                </button>
-              </div>
+              <div className="flex items-center justify-center gap-2 mt-3"><p className="text-xl font-bold">{name}</p><button onClick={() => setIsEditingName(true)} className="text-gray-400"><FaEdit /></button></div>
             ) : (
-              <div className="flex items-center gap-2 mt-3">
-                <input
-                  type="text"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  className="flex-grow p-2 text-white rounded-lg border border-gray-600 bg-gray-700 focus:ring-primary-500 focus:border-primary-500"
-                />
-                <button onClick={handleSaveName} className="p-2 text-green-500 hover:text-green-400"><FaSave /></button>
-                <button 
-                  onClick={() => {
-                    setIsEditingName(false);
-                    setName(user.name || user.username); // Reset on cancel
-                  }} 
-                  className="p-2 text-red-500 hover:text-red-400"
-                >
-                  <FaTimes />
-                </button>
-              </div>
+              <div className="flex items-center gap-2 mt-3"><input type="text" value={name} onChange={(e) => setName(e.target.value)} className="flex-grow p-2 text-white bg-gray-700 rounded" /><button onClick={handleSaveName} className="text-green-500"><FaSave /></button></div>
             )}
-            {/* ✅ ----------------------------- ✅ */}
             
-            <p className="text-sm text-gray-400 text-center">{user?.username}</p>
-
-            <div className="text-center mt-4 p-3 bg-gray-800 rounded-lg">
-              <span className="text-2xl font-bold text-primary-500">{user?.forgivenessTokens}</span>
-              <p className="text-sm text-gray-300">Forgiveness Tokens</p>
+            {/* ✅ Streak Stats */}
+            <div className="grid grid-cols-2 gap-4 mt-4">
+              <div className="p-3 bg-gray-800 rounded-lg text-center">
+                 <FaFire className="text-orange-500 text-2xl mx-auto mb-1"/>
+                 <span className="text-xl font-bold text-white">{liveStreak}</span>
+                 <p className="text-xs text-gray-400">Current Streak</p>
+              </div>
+              <div className="p-3 bg-gray-800 rounded-lg text-center">
+                 <span className="text-2xl font-bold text-primary-500 block mb-1">{user?.forgivenessTokens}</span>
+                 <p className="text-xs text-gray-400">Forgiveness Tokens</p>
+              </div>
             </div>
 
-            <button
-              onClick={() => {
-                setShowArchived(!showArchived);
-              }}
-              className="mt-4 w-full px-4 py-2 bg-yellow-500 hover:bg-yellow-600 text-black rounded-lg transition-all font-semibold"
-            >
-              {showArchived ? "Hide Archive" : "View Archive"}
-            </button>
-
-            {showArchived && (
-              <div className="mt-4 p-4 bg-gray-800 rounded-lg max-h-40 overflow-y-auto text-white">
-                <h3 className="text-lg font-bold mb-2">Archived Tasks</h3>
-                {archive.length > 0 ? (
-                  <ul className="text-sm">
-                    {archive.map((task, index) => (
-                      <li key={index} className="border-b border-gray-700 py-1">
-                        {task.text} - {new Date(task.deadline).toDateString()}
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="text-gray-400">No archived tasks yet.</p>
-                )}
+            <button onClick={toggleJournal} className="mt-4 w-full py-2 bg-purple-600 hover:bg-purple-700 rounded font-bold text-sm text-white">{showJournal ? "Hide History" : "View History"}</button>
+            {showJournal && (
+              <div className="mt-4 p-3 bg-gray-800 rounded-lg max-h-60 overflow-y-auto">
+                {journalHistory.map(entry => (
+                  <div key={entry.id} className="border-b border-gray-700 pb-2 mb-2">
+                    <div className="flex justify-between text-xs text-gray-400"><span>{new Date(entry.createdAt).toLocaleDateString()}</span><span>{entry.reason === "User login" ? "LOGIN" : "REFLECT"}</span></div>
+                    {entry.reason !== "User login" && <p className="text-gray-300 text-sm mt-1">{entry.reason}</p>}
+                  </div>
+                ))}
               </div>
             )}
-            
-            <button
-              onClick={onLogout}
-              className="mt-4 text-red-400 hover:text-red-500 transition-all w-full text-left"
-            >
-              Logout
-            </button>
 
-            <button
-              onClick={() => setIsOpen(false)}
-              className="mt-6 w-full px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg transition-all font-semibold"
-            >
-              Close
-            </button>
+            {/* ✅ GOD MODE BUTTON */}
+            <div className="mt-6 pt-4 border-t border-gray-700">
+              <button onClick={handleGodMode} className="w-full py-2 bg-red-900/50 hover:bg-red-800 text-red-200 border border-red-700 rounded text-xs font-mono">
+                ⚠️ DEV: Set Streak & Time Travel
+              </button>
+            </div>
+
+            <button onClick={onLogout} className="mt-6 text-red-400 w-full text-left">Logout</button>
+            <button onClick={() => setIsOpen(false)} className="mt-2 w-full py-2 bg-gray-700 rounded">Close</button>
           </div>
         </div>
       )}

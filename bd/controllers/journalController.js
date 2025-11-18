@@ -1,110 +1,67 @@
-// bd/controllers/journalController.js
 const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
+const { updateGlobalStreak } = require('./streakController'); 
 
-// --- NEW HELPER FUNCTION ---
-const getDateKey = (date) => date.toISOString().split('T')[0];
-
-/**
- * Creates a journal entry for login, but only once per day.
- * This will mark the activity heatmap (StreakGrid) for today.
- */
 const createLoginJournalEntry = async (userId) => {
-  const todayKey = getDateKey(new Date());
-  
+  const todayKey = new Date().toISOString().split('T')[0];
   try {
     const lastLoginEntry = await prisma.journalEntry.findFirst({
-      where: {
-        userId: userId,
-        reason: "User login" // This is a special reason for this entry
-      },
-      orderBy: {
-        createdAt: 'desc'
-      }
+      where: { userId: userId, reason: "User login" },
+      orderBy: { createdAt: 'desc' }
     });
 
     if (lastLoginEntry) {
-      const lastLoginDateKey = getDateKey(lastLoginEntry.createdAt);
-      if (lastLoginDateKey === todayKey) {
-        // An entry for today already exists, do nothing
-        return;
-      }
+      const lastLoginDateKey = lastLoginEntry.createdAt.toISOString().split('T')[0];
+      if (lastLoginDateKey === todayKey) return;
     }
 
-    // No login entry for today, create one
     await prisma.journalEntry.create({
-      data: {
-        userId: userId,
-        reason: "User login",
-        mitigation: "N/A", // 'mitigation' is required, so we use a placeholder
-        taskId: null
-      }
+      data: { userId, reason: "User login", mitigation: "N/A", taskId: null }
     });
-    console.log(`✅ Created login journal entry for user ${userId}`);
-
   } catch (error) {
-    // Log the error but don't fail the login
-    console.error("🔥 Failed to create login journal entry:", error);
+    console.error("Login journal error:", error);
   }
 };
-// --- END OF NEW FUNCTION ---
 
 const createJournalEntry = async (req, res) => {
   const userId = req.user.id;
-  const { reason, mitigationPlan, taskId } = req.body;
+  const { reason, mitigationPlan } = req.body;
 
-  if (!reason || !mitigationPlan) {
-    return res.status(400).json({ message: "Reason and mitigation plan are required." });
-  }
+  if (!reason || !mitigationPlan) return res.status(400).json({ message: "Missing fields" });
 
   try {
     const newEntry = await prisma.journalEntry.create({
-      data: {
-        userId,
-        reason,
-        mitigation: mitigationPlan, // Use 'mitigationPlan' from request
-        taskId: taskId ? parseInt(taskId) : null,
-      },
+      data: { userId, reason, mitigation: mitigationPlan },
     });
     res.status(201).json(newEntry);
   } catch (error) {
-    console.error("🔥 Error creating journal entry:", error);
-    res.status(500).json({ message: "Server error creating journal entry" });
+    res.status(500).json({ message: "Server error" });
   }
 };
 
 const getJournalEntries = async (req, res) => {
-  const userId = req.user.id;
   try {
     const entries = await prisma.journalEntry.findMany({
-      where: { userId: userId },
-      select: {
-        id: true,
-        createdAt: true, 
-      },
+      where: { userId: req.user.id },
+      orderBy: { createdAt: 'desc' },
+      select: { id: true, createdAt: true, reason: true, mitigation: true },
     });
     res.status(200).json(entries);
   } catch (error) {
-    console.error("🔥 Error fetching journal entries:", error);
-    res.status(500).json({ message: "Server error fetching journal entries" });
+    res.status(500).json({ message: "Server error" });
   }
 };
 
-// --- NEW FUNCTION TO HANDLE APP LOAD ---
+// ✅ Checks streak on app load
 const handleAppLoad = async (req, res) => {
   try {
     await createLoginJournalEntry(req.user.id);
-    res.status(200).json({ message: "App load processed." });
+    const result = await updateGlobalStreak(req.user.id);
+    res.status(200).json({ message: "App loaded", streak_broken: result.streak_broken });
   } catch (error) {
-    console.error("🔥 Error during app-load process:", error);
-    res.status(500).json({ message: "Server error processing app load" });
+    console.error(error);
+    res.status(500).json({ message: "Server error" });
   }
 };
-// --- END OF NEW FUNCTION ---
 
-module.exports = {
-  createJournalEntry,
-  getJournalEntries,
-  createLoginJournalEntry, // ✅ Export for userController
-  handleAppLoad,           // ✅ Export for new route
-};
+module.exports = { createJournalEntry, getJournalEntries, createLoginJournalEntry, handleAppLoad };

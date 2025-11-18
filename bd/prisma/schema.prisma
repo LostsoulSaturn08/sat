@@ -1,29 +1,25 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "sqlite" // or "postgresql"
+  provider = "sqlite"
   url      = env("DATABASE_URL")
 }
-// We also need to add the forgiveness tokens to the user model 
+
 model User {
   id                Int      @id @default(autoincrement())
   username          String   @unique
   password          String
-  name              String?  // ✅ ADD THIS LINE to store the display name
+  name              String?
   dp                String?
-  tasks             Task[]
-  streaks           Streak[]
-  journalEntries    JournalEntry[]
   forgivenessTokens Int      @default(2)
+  
+  tasks             Task[]
+  streak            Streak?        
+  journalEntries    JournalEntry[]
 }
-//And connect the new models back to Task and User 
+
 model Task {
   id        Int      @id @default(autoincrement())
   text      String
@@ -33,31 +29,25 @@ model Task {
   total     Int
   userId    Int
   user      User     @relation(fields: [userId], references: [id])
-  streaks   Streak[]
-  journalEntries  JournalEntry[]
+  
   @@index([userId])
 }
 
 model Streak {
-  id       Int     @id @default(autoincrement())
-  userId   Int      
-  user     User    @relation(fields: [userId], references: [id])
-  taskId   Int     
-  task     Task    @relation(fields: [taskId] , references: [id])
-  count    Int     @default(0) // How long the strek is 
+  id          Int      @id @default(autoincrement())
+  userId      Int      @unique 
+  user        User     @relation(fields: [userId], references: [id])
+  count       Int      @default(0)
+  prevCount   Int      @default(0) // Stores the lost streak for restoration
   lastUpdated DateTime @updatedAt
-
-  @@ unique([userId , taskId]) // A user can only have one streak per task 
 }
 
 model JournalEntry {
-  id     Int @id @default(autoincrement())
-  userId  Int 
-  user    User  @relation(fields: [userId] , references:[id])
-  taskId   Int?  // the task associated with the streak  break 
-  task  Task? @relation(fields:[taskId], references: [id])
-  reason String //"What was the main reason you missed your goal?"
-  mitigation String//"What's one thing you could change?"
+  id         Int      @id @default(autoincrement())
+  userId     Int
+  user       User     @relation(fields: [userId], references: [id])
+  taskId     Int?     
+  reason     String
+  mitigation String
   createdAt  DateTime @default(now())
-
 }
